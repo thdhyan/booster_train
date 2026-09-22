@@ -4,7 +4,13 @@ from dataclasses import MISSING
 import torch
 from collections.abc import Sequence
 
-from isaaclab.actuators import DelayedPDActuator, DelayedPDActuatorCfg, ImplicitActuator, ImplicitActuatorCfg
+from isaaclab.actuators import (
+    DelayedPDActuator,
+    DelayedPDActuatorCfg,
+    ImplicitActuator,
+    ImplicitActuatorCfg,
+    resolve_joint_parameter,
+)
 from isaaclab.utils import DelayBuffer, configclass
 from isaaclab.utils.types import ArticulationActions
 
@@ -94,7 +100,15 @@ class BoosterDelayedPDActuator(DelayedPDActuator):
     def __init__(self, cfg: "BoosterDelayedPDActuatorCfg", *args, **kwargs):
         super().__init__(cfg, *args, **kwargs)
         # Knee speed for the torque-speed curve. Defaults to velocity_limit (i.e. no reduction).
-        self.knee_point_velocity = self._parse_joint_parameter(cfg.knee_point_velocity, self.velocity_limit)
+        # IL 3.0: the protected helper ActuatorBase._parse_joint_parameter was removed
+        # together with the constructor rework → standalone resolve_joint_parameter
+        # (same resolution semantics; returns a (num_envs, num_joints) tensor).
+        if cfg.knee_point_velocity is None:
+            self.knee_point_velocity = self.velocity_limit
+        else:
+            self.knee_point_velocity = resolve_joint_parameter(
+                cfg.knee_point_velocity, 0.0, self.joint_names, self._num_envs, self._device
+            )
         self.knee_point_velocity = torch.clamp(self.knee_point_velocity, min=0.0)
         self.knee_point_velocity = torch.minimum(self.knee_point_velocity, self.velocity_limit)
         # buffer used for speed-based clipping
