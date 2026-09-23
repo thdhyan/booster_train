@@ -1,4 +1,4 @@
-from isaaclab.utils import configclass
+from isaaclab.utils.configclass import configclass
 from booster_train.tasks.manager_based.beyond_mimic.agents.rsl_rl_ppo_cfg import BasePPORunnerCfg
 
 

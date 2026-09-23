@@ -9,10 +9,69 @@ from isaaclab.actuators import (
     DelayedPDActuatorCfg,
     ImplicitActuator,
     ImplicitActuatorCfg,
-    resolve_joint_parameter,
 )
-from isaaclab.utils import DelayBuffer, configclass
+from isaaclab.utils import DelayBuffer
+from isaaclab.utils.configclass import configclass
 from isaaclab.utils.types import ArticulationActions
+
+try:
+    # Isaac Lab 3.0-EA (dl) exports this from isaaclab.actuators.
+    from isaaclab.actuators import resolve_joint_parameter
+except (ImportError, ModuleNotFoundError):
+    # The isaac-lab image predates the export: vendor EA's implementation
+    # (IsaacLab ea actuator_base.py — identical resolution semantics) so both
+    # stacks resolve joint parameters the same way.
+    import isaaclab.utils.string as _string_utils
+
+    def resolve_joint_parameter(
+        cfg_value: float | dict[str, float] | None,
+        default_value: float | torch.Tensor | None,
+        joint_names: list[str],
+        num_envs: int,
+        device: str,
+    ) -> torch.Tensor:
+        num_joints = len(joint_names)
+        param = torch.zeros(num_envs, num_joints, device=device)
+        if cfg_value is not None:
+            if isinstance(cfg_value, (float, int)):
+                param[:] = float(cfg_value)
+            elif isinstance(cfg_value, dict):
+                # Same contract as EA's _resolve_matching_values_dense (absent on the
+                # image): resolve_matching_names_values exists on both stacks —
+                # patterns resolve to values, unmatched joints zero-fill (EA's
+                # documented dense contract).
+                _idx, _names, _vals = _string_utils.resolve_matching_names_values(
+                    cfg_value, joint_names
+                )
+                dense_values = [0.0] * num_joints
+                for i, v in zip(_idx, _vals, strict=True):
+                    dense_values[int(i)] = float(v)
+                param[:] = torch.tensor(dense_values, dtype=torch.float, device=device)
+            else:
+                raise TypeError(
+                    f"Invalid type for parameter value: {type(cfg_value)} for "
+                    + f"actuator on joints {joint_names}. Expected float or dict."
+                )
+        elif default_value is not None:
+            if isinstance(default_value, (float, int)):
+                param[:] = float(default_value)
+            elif isinstance(default_value, torch.Tensor):
+                if default_value.shape == (num_envs, num_joints):
+                    param = default_value.float()
+                else:
+                    raise ValueError(
+                        "Invalid default value tensor shape.\n"
+                        f"Got: {default_value.shape}\n"
+                        f"Expected: {(num_envs, num_joints)}"
+                    )
+            else:
+                raise TypeError(
+                    f"Invalid type for default value: {type(default_value)} for "
+                    + f"actuator on joints {joint_names}. Expected float or Tensor."
+                )
+        else:
+            raise ValueError("The parameter value is None and no default value is provided.")
+        return param
 
 
 class DelayedImplicitActuator(ImplicitActuator):

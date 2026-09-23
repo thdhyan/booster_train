@@ -11,8 +11,55 @@ from booster_train.assets.robots.actuator import (
 
 from booster_assets import BOOSTER_ASSETS_DIR
 
+
+def _set_float_attr(prim, name: str, value: float) -> None:
+    from pxr import Sdf
+
+    attr = prim.GetAttribute(name)
+    if not attr:
+        attr = prim.CreateAttribute(name, Sdf.ValueTypeNames.Float)
+    attr.Set(value)
+
+
+def _spawn_k1_urdf(prim_path: str, cfg, *args, **kwargs):
+    """Spawn a Booster URDF and activate contact reporting on **all** nested rigid bodies.
+
+    The Isaac Sim 6.0.x URDF importer nests rigid bodies inside rigid bodies, but the
+    stock ``activate_contact_sensors`` walk stops descending at the first rigid body it
+    finds ("nested rigid bodies are not allowed by SDK"). Only the root body therefore
+    gets ``PhysxContactReportAPI``, and the contact sensor -- which collects its bodies
+    by that API -- reports only the root (no feet: ``foot_contact_slip`` /
+    ``feet_air_time`` / ``feet_slide`` dead). dl/EA carries the upstream nested-tree fix
+    (PR #6378, Gate G1); this replicates that walk. Re-applying on dl is a no-op, so both
+    stacks keep byte-identical behavior.
+    """
+    from isaaclab.sim.spawners.from_files import spawn_from_urdf
+    from pxr import UsdPhysics
+
+    prim = spawn_from_urdf(prim_path, cfg, *args, **kwargs)
+
+    frontier = [prim]
+    num_bodies = 0
+    while frontier:
+        child = frontier.pop(0)
+        # Descend *through* rigid bodies as well: the nested importer puts bodies in bodies.
+        if child.HasAPI(UsdPhysics.RigidBodyAPI):
+            applied = child.GetAppliedSchemas()
+            if "PhysxRigidBodyAPI" not in applied:
+                child.AddAppliedSchema("PhysxRigidBodyAPI")
+            _set_float_attr(child, "physxRigidBody:sleepThreshold", 0.0)
+            if "PhysxContactReportAPI" not in applied:
+                child.AddAppliedSchema("PhysxContactReportAPI")
+            _set_float_attr(child, "physxContactReport:threshold", 0.0)
+            num_bodies += 1
+        frontier.extend(child.GetChildren())
+    print(f"[k1_contact] activated contact reporting on {num_bodies} rigid bodies under {prim_path}")
+    return prim
+
+
 BOOSTER_K1_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
+        func=_spawn_k1_urdf,
         fix_base=False,
         replace_cylinders_with_capsules=False,
         asset_path=f"{BOOSTER_ASSETS_DIR}/robots/K1/K1_22dof.urdf",
@@ -121,6 +168,7 @@ print(f'{K1_ACTION_SCALE=}')
 
 BOOSTER_T1_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
+        func=_spawn_k1_urdf,
         fix_base=False,
         asset_path=f"{BOOSTER_ASSETS_DIR}/robots/T1/T1_23dof.urdf",
         activate_contact_sensors=True,

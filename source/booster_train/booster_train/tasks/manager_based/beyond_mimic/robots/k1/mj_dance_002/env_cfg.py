@@ -1,4 +1,4 @@
-from isaaclab.utils import configclass
+from isaaclab.utils.configclass import configclass
 from isaaclab.terrains import TerrainGeneratorCfg
 import isaaclab.terrains as terrain_gen
 from booster_assets import BOOSTER_ASSETS_DIR

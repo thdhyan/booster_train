@@ -18,7 +18,7 @@ from isaaclab.terrains import TerrainImporterCfg
 ##
 # Pre-defined configs
 ##
-from isaaclab.utils import configclass
+from isaaclab.utils.configclass import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 import booster_train.tasks.manager_based.beyond_mimic.mdp as mdp
