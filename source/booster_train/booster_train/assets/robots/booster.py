@@ -120,12 +120,27 @@ BOOSTER_K1_CFG = ArticulationCfg(
                     serial_index=0,
                     natural_freq = 4.0,
                     damping_ratio = 1.5,
+                    # RESTORED from upstream BoosterRobotics/booster_train @ main
+                    # (source/booster_train/booster_train/assets/robots/booster_k1.py).
+                    # This local fork had dropped them, silently falling back to the
+                    # class default armature_ratio=(2.0, 2.0).
+                    #
+                    # The K1 ankle is a 4-bar parallel linkage: the pitch and roll
+                    # axes see DIFFERENT effective inertia, which is exactly what
+                    # this per-axis ratio encodes. Restoring it changes the derived
+                    # gains from 35.69/35.69 to 24.98/7.14 Nm/rad -- and the
+                    # velocity task was then hand-overriding them to 100.0/35.69 on
+                    # top, i.e. 4x and 5x stiffer than the real robot, which is a
+                    # large part of why the policy could not stand (mean episode
+                    # length 6 steps, 96% base_orientation terminations).
+                    armature_ratio=(1.4, 0.4),
                 ),
                 ".*_Ankle_Roll": actuator.BoosterK1AnkleParaWrapperCfg(
                     base_joint_cfg=actuator.BoosterJointE4310(),
                     serial_index=1,
                     natural_freq = 4.0,
                     damping_ratio = 1.5,
+                    armature_ratio=(1.4, 0.4),
                 ),
             },
         ),
